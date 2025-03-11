@@ -2,6 +2,7 @@ package com.pineapplepie.sample
 
 import android.os.Bundle
 import android.text.SpannableStringBuilder
+import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.text.bold
@@ -12,6 +13,7 @@ import com.pineapplepie.sample.databinding.ActivitySampleBinding
 import com.pineapplepie.speechhelper.texttospeech.TextToSpeechManager
 import com.pineapplepie.speechhelper.texttospeech.state.InitializationState
 import com.pineapplepie.speechhelper.texttospeech.state.SpeakingState
+import com.pineapplepie.speechhelper.texttospeech.state.TextToSpeechManagerCallback
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import java.util.Locale
@@ -32,11 +34,17 @@ class SampleActivity : AppCompatActivity() {
     }
 
     private fun setupTextToSpeech() {
-        textToSpeechManager = TextToSpeechManager(this)
+        textToSpeechManager = TextToSpeechManager(this, "com.google.android.tts")
         textToSpeechManager.initializationState.observe { state ->
             if (state is InitializationState.Success) {
                 binding.inputText.setText(getString(R.string.sample_random_text))
                 textToSpeechManager.setLanguage(Locale.ENGLISH)
+
+                val voices = textToSpeechManager.getEnglishIndianVoices("ene");
+                Log.d("TTS", voices.toString())
+                if(!voices.isNullOrEmpty()) {
+                    textToSpeechManager.setVoice(voices[0])
+                }
             }
         }
 

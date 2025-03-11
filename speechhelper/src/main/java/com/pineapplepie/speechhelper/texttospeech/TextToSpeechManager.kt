@@ -4,10 +4,12 @@ import android.content.Context
 import android.content.Context.AUDIO_SERVICE
 import android.media.AudioManager
 import android.speech.tts.TextToSpeech
+import android.speech.tts.Voice
 import android.util.Log
 import com.pineapplepie.speechhelper.texttospeech.audiofocus.AudioFocusManager
 import com.pineapplepie.speechhelper.texttospeech.state.InitializationState
 import com.pineapplepie.speechhelper.texttospeech.state.SpeakingState
+import com.pineapplepie.speechhelper.texttospeech.state.TextToSpeechManagerCallback
 import com.pineapplepie.speechhelper.texttospeech.util.addUtteranceListener
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -32,12 +34,32 @@ class TextToSpeechManager {
     private val sentenceQueue: ArrayDeque<Sentence> = ArrayDeque()
 
     private lateinit var audioFocusManager: AudioFocusManager
+    private var callback: TextToSpeechManagerCallback? = null
 
     private var _textToSpeech: TextToSpeech? = null
     private val textToSpeech: TextToSpeech
         get() = requireNotNull(_textToSpeech) {
             "Text-to-speech object should be already initialized!"
         }
+
+    fun setCallback(callback: TextToSpeechManagerCallback) {
+        this.callback = callback;
+    }
+
+    fun setVoice(voice: Voice) {
+        textToSpeech.voice = voice
+    }
+
+    fun getVoices(): MutableSet<Voice>? {
+        return textToSpeech.voices
+    }
+
+    /**
+     * @param voiceVariant: ene might be a deep male voice, while enc is a soft-spoken female voice. end could have a faster speech rate, while ena sounds more natural.
+     */
+    fun getEnglishIndianVoices(voiceVariant: String): List<Voice>? {
+        return textToSpeech.voices?.filter { it.locale == Locale("en", "IN") && it.name.contains(voiceVariant) }
+    }
 
     fun setText(text: String): Boolean {
         if (!checkIfInitialized()) return false
@@ -66,6 +88,7 @@ class TextToSpeechManager {
             textToSpeech.stop()
             abandonAudioFocus()
             _speakingStatus.tryEmit(SpeakingState.Paused)
+            callback?.onSpeakingStatus(SpeakingState.Paused)
         }
     }
 
@@ -98,8 +121,10 @@ class TextToSpeechManager {
             if (it is InitializationState.Success) {
                 listenToProgress()
                 requestAudioFocus()
+                callback?.onInit(InitializationState.Success)
             } else {
                 Log.e(TAG, "TTS initialization has failed")
+                callback?.onInit(InitializationState.Error)
             }
         }
     }
@@ -115,10 +140,12 @@ class TextToSpeechManager {
     private fun readNextLine() {
         if (sentenceQueue.isEmpty()) {
             _speakingStatus.tryEmit(SpeakingState.Finished)
+            callback?.onSpeakingStatus(SpeakingState.Finished)
             return
         }
 
         _speakingStatus.tryEmit(SpeakingState.Speaking)
+        callback?.onSpeakingStatus(SpeakingState.Speaking)
         val sentence = sentenceQueue.first()
         textToSpeech.speak(
             sentence.text,
@@ -131,6 +158,7 @@ class TextToSpeechManager {
     private fun listenToProgress() {
         textToSpeech.addUtteranceListener(start = {
             _speakingStatus.tryEmit(SpeakingState.Speaking)
+            callback?.onSpeakingStatus(SpeakingState.Speaking)
         }, done = {
             sentenceQueue.removeFirst()
             readNextLine()
